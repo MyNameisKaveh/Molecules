@@ -2,13 +2,12 @@ import streamlit as st
 import pubchempy as pcp
 from rdkit import Chem
 from rdkit.Chem import Draw
-# Removed py3Dmol, components, uuid
-import stmol          # Added stmol import
+import stmol          # Using stmol
 import re
-import numpy          # Keep numpy import
+import numpy
 from PIL import Image
 
-# --- Helper Functions (Keep as before) ---
+# --- Helper Functions ---
 def normalize_name(name):
     """Cleans molecule name"""
     name = name.strip()
@@ -61,7 +60,7 @@ if raw_molecule_name:
                 try:
                     mol_weight_display = f"{float(compound.molecular_weight):.2f} g/mol"
                 except (ValueError, TypeError):
-                    mol_weight_display = f"{compound.molecular_weight} g/mol" # Display as is if conversion fails
+                    mol_weight_display = f"{compound.molecular_weight} g/mol"
             st.metric("Mol. Weight", mol_weight_display)
 
         if compound.cid:
@@ -92,10 +91,9 @@ if raw_molecule_name:
             with col_3d:
                 st.markdown("**3D Structure (Interactive):**")
                 sdf_content = None
-                # Download SDF content (same logic as before)
                 if compound.cid:
                     try:
-                        # You can keep or remove debug messages as needed
+                        # Debug messages can be removed if no longer needed
                         # st.write(f"[Debug] Downloading SDF CID: {compound.cid}")
                         temp_sdf_file=f'c{compound.cid}_3d.sdf'
                         pcp.download('SDF', temp_sdf_file, compound.cid, 'cid', record_type='3d', overwrite=True)
@@ -109,33 +107,29 @@ if raw_molecule_name:
                         st.warning(f"3D SDF not found on PubChem (CID {compound.cid}).")
                     except Exception as e:
                         st.error(f"SDF Download Error: {e}")
-                        sdf_content = None # Ensure sdf_content is None on error
+                        sdf_content = None
                 else:
                     st.warning("No PubChem CID available to download 3D structure.")
 
-                # Render using stmol if SDF content exists
                 if sdf_content:
                     try:
                         # st.write("[Debug] Rendering with stmol...")
-                        # --- Use stmol.showmol ---
-                        stmol.showmol(sdf_content, style="stick", height=400, width=400)
+                        # --- Use stmol.showmol (REMOVED style argument) ---
+                        stmol.showmol(sdf_content, height=400, width=400)
                         # --- End of stmol usage ---
                         # st.write("[Debug] stmol rendering attempted.")
                     except Exception as e:
                         st.error(f"Error rendering 3D view with stmol: {e}")
                         st.error(f"Exception type: {type(e)}")
                 # else: No need for else, handled by SDF download warnings
-
             # --- End of 3D Structure block ---
 
         # Synonyms
         if compound and hasattr(compound, 'synonyms') and compound.synonyms:
              st.subheader("Other Names:")
-             # Display first 5 synonyms
              st.json(compound.synonyms[:5])
 
-    elif raw_molecule_name: # Only show if search was attempted but failed
+    elif raw_molecule_name:
         st.info("Search finished. See messages above for results or errors.")
-
-else: # Initial state
+else:
     st.info("Enter an English molecule name above.")
