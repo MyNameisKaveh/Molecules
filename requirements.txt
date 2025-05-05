@@ -1,6 +1,6 @@
 streamlit
 pubchempy
-rdkit-pypi
-py3Dmol
+rdkit-pypi==2022.9.5 # Keep RDKit pinned for stability
+py3Dmol>=2.4.4      # Request version 2.4.4 or newer
 Pillow
-numpy<2.0
+numpy<2.0          # Keep NumPy constraint
