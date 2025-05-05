@@ -1,8 +1,5 @@
-# For RDKit drawing (keep if needed)
 libxrender1
 libxext6
 libfontconfig1
 libfreetype6
-
-# For translators/exejs (Add this)
 nodejs
