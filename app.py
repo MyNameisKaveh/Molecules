@@ -3,7 +3,8 @@ import pubchempy as pcp
 from rdkit import Chem
 from rdkit.Chem import Draw
 import py3Dmol
-from streamlit_py3dmol import st_py3dmol # Import the Streamlit component for py3Dmol
+# Removed: from streamlit_py3dmol import st_py3dmol
+import streamlit.components.v1 as components # Import Streamlit components
 import re # For text manipulation (regex)
 from PIL import Image # Needed by RDKit Draw sometimes explicitly, and Pillow is in requirements
 
@@ -139,9 +140,6 @@ if raw_molecule_name:
                 sdf_content = None
                 try:
                     # Attempt to download 3D SDF format from PubChem
-                    # Note: Downloading directly to memory might be better, but requires more complex handling
-                    # For simplicity on Streamlit Cloud, we download to a temporary file implicitly created by PubChemPy
-                    # Overwrite=True ensures we get a fresh file if it exists
                     temp_sdf_file = f'cid_{compound.cid}_3d.sdf'
                     pcp.download('SDF', temp_sdf_file, compound.cid, 'cid', record_type='3d', overwrite=True)
 
@@ -160,15 +158,19 @@ if raw_molecule_name:
                         viewer = py3Dmol.view(width=400, height=400)
                         viewer.addModel(sdf_content, 'sdf')
                         viewer.setStyle({'stick': {}}) # Display as stick model
-                        # viewer.setStyle({'sphere': {'scale': 0.3}, 'stick': {'radius': 0.15}}) # Alternative style: ball-and-stick
                         viewer.setBackgroundColor('0xeeeeee') # Light gray background
                         viewer.zoomTo()
 
-                        # Display the viewer in Streamlit using the component
-                        st_py3dmol(viewer, height=400, width=400)
+                        # --- NEW WAY to display using components.html ---
+                        # Generate HTML representation from py3Dmol viewer
+                        viewer_html = viewer._repr_html_()
+                        # Embed the HTML using Streamlit components
+                        components.html(viewer_html, height=410, width=410) # Slightly larger height/width can help avoid scrollbars
+                        # --- End of new way ---
 
                     except Exception as e:
-                        st.error(f"Error rendering 3D view with py3Dmol: {e}")
+                        st.error(f"Error rendering 3D view with py3Dmol/components: {e}")
+
                 # else: (Handled by the warning above if sdf_content is None due to NotFoundError)
                      # st.warning("Could not display 3D structure (SDF content missing or download failed).")
 
