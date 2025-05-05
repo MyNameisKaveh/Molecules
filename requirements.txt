@@ -1,7 +1,7 @@
 streamlit
 pubchempy
 rdkit-pypi==2022.9.5
-# py3Dmol==2.4.2 # Removed or commented out
-stmol           # Added
+stmol
 Pillow
 numpy<2.0
+ipython_genutils  # Added dependency for ipywidgets/stmol
