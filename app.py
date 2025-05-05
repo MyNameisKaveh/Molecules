@@ -3,7 +3,6 @@ import pubchempy as pcp
 from rdkit import Chem
 from rdkit.Chem import Draw
 import py3Dmol
-# Removed: from streamlit_py3dmol import st_py3dmol
 import streamlit.components.v1 as components # Import Streamlit components
 import re # For text manipulation (regex)
 from PIL import Image # Needed by RDKit Draw sometimes explicitly, and Pillow is in requirements
@@ -14,11 +13,11 @@ def normalize_name(name):
     """
     Cleans the molecule name for better search results.
     Removes leading/trailing whitespace, converts to lowercase.
-    Converts Persian/Arabic numerals to English numerals.
     Handles spaces (converts multiple spaces to one).
+    (Kept numeral conversion in case numbers are typed differently)
     """
     name = name.strip() # Remove leading/trailing whitespace
-    # Convert Persian and Arabic numerals to English
+    # Convert Persian and Arabic numerals to English (just in case)
     persian_nums = "۰۱۲۳۴۵۶۷۸۹"
     arabic_nums = "٠١٢٣٤٥٦٧٨٩"
     english_nums = "0123456789"
@@ -48,42 +47,25 @@ def get_molecule_data(name):
         st.error(f"Error connecting to PubChem: {e}")
         return None
 
-def detect_language(text):
-    """
-    Simple detection of Persian language based on character range.
-    """
-    # Check if any character falls within the Persian Unicode range
-    if re.search(r'[\u0600-\u06FF]', text):
-        return "Persian"
-    else:
-        # Assume English or other non-Persian if no Persian chars found
-        return "English"
+# --- REMOVED detect_language function ---
 
 # --- Streamlit User Interface ---
 
 st.set_page_config(layout="wide") # Use wide layout for more space
 st.title("🧪 Molecule Information Viewer ⌬")
 st.markdown("""
-Enter the name of a molecule in English or Persian. The app will try to display its information and structure.
-**Note:** Searching by the exact English name usually yields better results. Persian names might require translation (not implemented yet).
+Enter the English name of a molecule. The app will try to display its information and structure.
+The search is case-insensitive and handles extra spaces (e.g., '1 chlorobutane' works).
 """)
 
 # --- Get User Input ---
-raw_molecule_name = st.text_input("Molecule Name:", placeholder="e.g., Water, Aspirin, 1-chlorobutane, آب")
+# Updated placeholder and removed Persian references
+raw_molecule_name = st.text_input("Molecule Name (English):", placeholder="e.g., Water, Aspirin, 1-chlorobutane")
 
 if raw_molecule_name:
-    # Detect input language
-    lang = detect_language(raw_molecule_name)
-    st.write(f"Detected language: {'Persian' if lang == 'Persian' else 'English/Other'}")
-
-    if lang == "Persian":
-        st.warning("⚠️ Note: Searching with Persian names may be inaccurate or return no results. Using the English name is recommended.")
-        # Future improvement: Add a translation service here.
-        # For now, just try the normalized Persian name (low chance of success on PubChem)
-        normalized_name = normalize_name(raw_molecule_name)
-    else:
-        # Normalize the English name
-        normalized_name = normalize_name(raw_molecule_name)
+    # --- REMOVED language detection block ---
+    # Normalize the input name directly
+    normalized_name = normalize_name(raw_molecule_name)
 
     st.write(f"Searching for: `{normalized_name}`")
 
@@ -102,9 +84,20 @@ if raw_molecule_name:
         with col1:
             st.metric("Molecular Formula", compound.molecular_formula or "N/A")
         with col2:
-            # Format weight to 2 decimal places if available
-            mol_weight = f"{compound.molecular_weight:.2f} g/mol" if compound.molecular_weight else "N/A"
-            st.metric("Molecular Weight", mol_weight)
+            # --- UPDATED Molecular Weight Handling ---
+            mol_weight_display = "N/A" # Default value
+            if compound.molecular_weight is not None: # Check if it exists
+                try:
+                    # Try converting to float before formatting
+                    weight_float = float(compound.molecular_weight)
+                    mol_weight_display = f"{weight_float:.2f} g/mol"
+                except (ValueError, TypeError):
+                    # If conversion fails (e.g., it's already a string like "Approx. 58"), display as is
+                    mol_weight_display = f"{compound.molecular_weight} g/mol" # Fallback
+
+            # Use the prepared string in st.metric
+            st.metric("Molecular Weight", mol_weight_display)
+            # --- End of Update ---
 
         # Display CID and link to PubChem
         if compound.cid:
@@ -134,7 +127,7 @@ if raw_molecule_name:
                 except Exception as e:
                     st.error(f"Error generating 2D image: {e}")
 
-            # Display 3D structure
+            # Display 3D structure using components.html
             with col_3d:
                 st.markdown("**3D Structure (Interactive):**")
                 sdf_content = None
@@ -161,19 +154,13 @@ if raw_molecule_name:
                         viewer.setBackgroundColor('0xeeeeee') # Light gray background
                         viewer.zoomTo()
 
-                        # --- NEW WAY to display using components.html ---
                         # Generate HTML representation from py3Dmol viewer
                         viewer_html = viewer._repr_html_()
                         # Embed the HTML using Streamlit components
-                        components.html(viewer_html, height=410, width=410) # Slightly larger height/width can help avoid scrollbars
-                        # --- End of new way ---
+                        components.html(viewer_html, height=410, width=410)
 
                     except Exception as e:
                         st.error(f"Error rendering 3D view with py3Dmol/components: {e}")
-
-                # else: (Handled by the warning above if sdf_content is None due to NotFoundError)
-                     # st.warning("Could not display 3D structure (SDF content missing or download failed).")
-
 
         else:
             # This message appears if SMILES string was missing or RDKit failed to parse it
@@ -188,8 +175,8 @@ if raw_molecule_name:
 
     elif raw_molecule_name: # Only show error if user actually typed something and nothing was found
         st.error(f"Sorry, no molecule found matching '{raw_molecule_name}' (or normalized name `{normalized_name}`).")
-        st.info("Please check the spelling. Using the English name is recommended.")
+        st.info("Please check the spelling and use the English name.")
 
 else:
     # Initial message when the input box is empty
-    st.info("Please enter a molecule name in the box above.")
+    st.info("Please enter an English molecule name in the box above.")
