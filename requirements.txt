@@ -2,5 +2,5 @@ streamlit
 pubchempy
 rdkit-pypi
 py3dmol
-streamlit-py3dmol # For the 3D viewer component
+streamlit-py3dmol
 Pillow
