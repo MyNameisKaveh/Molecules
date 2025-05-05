@@ -87,13 +87,13 @@ if raw_molecule_name:
                     st.image(img)
                 except Exception as e: st.error(f"Error generating 2D image: {e}")
 
-            # --- 3D Structure using stmol ---
+            # --- 3D Structure using stmol.obj ---
             with col_3d:
                 st.markdown("**3D Structure (Interactive):**")
                 sdf_content = None
                 if compound.cid:
                     try:
-                        # Debug messages can be removed if no longer needed
+                        # Optional: Remove debug messages if everything works
                         # st.write(f"[Debug] Downloading SDF CID: {compound.cid}")
                         temp_sdf_file=f'c{compound.cid}_3d.sdf'
                         pcp.download('SDF', temp_sdf_file, compound.cid, 'cid', record_type='3d', overwrite=True)
@@ -113,13 +113,20 @@ if raw_molecule_name:
 
                 if sdf_content:
                     try:
-                        # st.write("[Debug] Rendering with stmol...")
-                        # --- Use stmol.showmol (REMOVED style argument) ---
-                        stmol.showmol(sdf_content, height=400, width=400)
-                        # --- End of stmol usage ---
-                        # st.write("[Debug] stmol rendering attempted.")
+                        # st.write("[Debug] Rendering with stmol.obj...")
+                        # --- Use stmol.obj ---
+                        # 1. Create the visualization object from SDF string
+                        view = stmol.obj(sdf_content, file_extension='sdf') # Specify extension might help
+                        # 2. Set the desired style (using setStyle method)
+                        view.setStyle({'stick':{}})
+                        # Optional: Add other view settings like background color
+                        view.setBackgroundColor('0xeeeeee')
+                        # 3. Render the view using the render method
+                        view.render(height=400, width=400)
+                        # --- End of stmol.obj usage ---
+                        # st.write("[Debug] stmol.obj rendering attempted.")
                     except Exception as e:
-                        st.error(f"Error rendering 3D view with stmol: {e}")
+                        st.error(f"Error rendering 3D view with stmol.obj: {e}")
                         st.error(f"Exception type: {type(e)}")
                 # else: No need for else, handled by SDF download warnings
             # --- End of 3D Structure block ---
