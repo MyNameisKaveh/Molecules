@@ -1,0 +1,6 @@
+streamlit
+pubchempy
+rdkit-pypi
+py3dmol
+# Pillow برای نمایش عکس توسط RDKit لازمه
+Pillow
