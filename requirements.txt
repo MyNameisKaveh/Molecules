@@ -3,3 +3,4 @@ pubchempy
 rdkit-pypi
 py3Dmol
 Pillow
+numpy<2.0
