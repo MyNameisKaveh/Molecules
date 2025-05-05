@@ -2,5 +2,5 @@ streamlit
 pubchempy
 rdkit-pypi
 py3dmol
-# Pillow برای نمایش عکس توسط RDKit لازمه
+streamlit-py3dmol # For the 3D viewer component
 Pillow
