@@ -95,30 +95,32 @@ if raw_molecule_name:
                 # Download SDF content (same logic as before)
                 if compound.cid:
                     try:
-                        st.write(f"[Debug] Downloading SDF CID: {compound.cid}") # Keep debug msg
+                        # You can keep or remove debug messages as needed
+                        # st.write(f"[Debug] Downloading SDF CID: {compound.cid}")
                         temp_sdf_file=f'c{compound.cid}_3d.sdf'
                         pcp.download('SDF', temp_sdf_file, compound.cid, 'cid', record_type='3d', overwrite=True)
                         with open(temp_sdf_file, 'r') as f: sdf_content = f.read()
-                        if sdf_content:
-                            st.write(f"[Debug] SDF OK (len:{len(sdf_content)})") # Keep debug msg
-                        else:
-                            st.warning("[Debug] SDF empty") # Keep debug msg
+                        if not sdf_content:
+                            st.warning("Downloaded 3D SDF file was empty.")
                             sdf_content = None
+                        # else:
+                        #    st.write(f"[Debug] SDF OK (len:{len(sdf_content)})")
                     except pcp.NotFoundError:
                         st.warning(f"3D SDF not found on PubChem (CID {compound.cid}).")
                     except Exception as e:
                         st.error(f"SDF Download Error: {e}")
+                        sdf_content = None # Ensure sdf_content is None on error
                 else:
                     st.warning("No PubChem CID available to download 3D structure.")
 
                 # Render using stmol if SDF content exists
                 if sdf_content:
                     try:
-                        st.write("[Debug] Rendering with stmol...") # Keep debug msg
+                        # st.write("[Debug] Rendering with stmol...")
                         # --- Use stmol.showmol ---
                         stmol.showmol(sdf_content, style="stick", height=400, width=400)
                         # --- End of stmol usage ---
-                        st.write("[Debug] stmol rendering attempted.") # Keep debug msg
+                        # st.write("[Debug] stmol rendering attempted.")
                     except Exception as e:
                         st.error(f"Error rendering 3D view with stmol: {e}")
                         st.error(f"Exception type: {type(e)}")
