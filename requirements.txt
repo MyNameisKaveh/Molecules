@@ -1,8 +1,9 @@
 streamlit
 pubchempy
 rdkit-pypi==2022.9.5
-py3Dmol==2.4.2      # Keep py3Dmol
-stmol               # Keep stmol
+py3Dmol==2.4.2      # Keep as stmol backend
+stmol
 Pillow
 numpy<2.0
-ipython_genutils  # Keep this dependency
+ipython_genutils
+translators         # Add for translation
