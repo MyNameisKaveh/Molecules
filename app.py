@@ -92,27 +92,17 @@ if raw_molecule_name:
         with col1:
             st.metric("Molecular Formula", compound.molecular_formula or "N/A")
         with col2:
-            # --- CORRECTED Molecular Weight Handling ---
+            # CORRECTED Molecular Weight Handling
             mol_weight_display = "N/A" # Default value
-            # Check if the attribute exists and is not None
             if hasattr(compound, 'molecular_weight') and compound.molecular_weight is not None:
                 try:
-                    # Attempt conversion to float BEFORE formatting
                     weight_float = float(compound.molecular_weight)
                     mol_weight_display = f"{weight_float:.2f} g/mol"
                 except (ValueError, TypeError):
-                    # If conversion fails, it might already be a string description
-                    # Or it's a non-numeric value. Display it as is.
                     mol_weight_display = str(compound.molecular_weight)
-                    # Optionally add units if it doesn't seem to have them
                     if "g/mol" not in mol_weight_display.lower():
                          mol_weight_display += " g/mol"
-
-
-            # Display the result using st.metric
             st.metric("Molecular Weight", mol_weight_display)
-            # --- End of Correction ---
-
 
         # Display CID and link to PubChem
         if compound.cid:
@@ -120,19 +110,15 @@ if raw_molecule_name:
 
         # --- Display Structures ---
         mol = None # RDKit molecule object
-        # Check if SMILES data is available
         if hasattr(compound, 'isomeric_smiles') and compound.isomeric_smiles:
             try:
-                # Create RDKit molecule object from SMILES string
                 mol = Chem.MolFromSmiles(compound.isomeric_smiles)
-                if mol is None: # Check if MolFromSmiles failed silently
+                if mol is None:
                     st.warning("Could not generate molecule object from SMILES string.")
-
             except Exception as e:
                 st.error(f"Error processing SMILES with RDKit: {e}")
-                mol = None # Ensure mol is None if creation failed
+                mol = None
 
-        # Proceed only if the RDKit molecule object was created successfully
         if mol:
             st.subheader("Molecule Structure:")
             col_2d, col_3d = st.columns(2)
@@ -141,7 +127,6 @@ if raw_molecule_name:
             with col_2d:
                 st.markdown("**2D Structure:**")
                 try:
-                    # Generate 2D image using RDKit
                     img = Draw.MolToImage(mol, size=(300, 300))
                     st.image(img)
                 except Exception as e:
@@ -151,16 +136,18 @@ if raw_molecule_name:
             with col_3d:
                 st.markdown("**3D Structure (Interactive):**")
                 sdf_content = None
-                # Attempt to download 3D SDF only if we have a CID
                 if compound.cid:
                     try:
+                        st.write(f"[Debug] Attempting to download 3D SDF for CID: {compound.cid}") # Debug
                         temp_sdf_file = f'cid_{compound.cid}_3d.sdf'
                         pcp.download('SDF', temp_sdf_file, compound.cid, 'cid', record_type='3d', overwrite=True)
-                        # Read the content of the downloaded SDF file
                         with open(temp_sdf_file, 'r') as f:
                             sdf_content = f.read()
-                        if not sdf_content: # Check if file was empty
-                             st.warning("Downloaded 3D SDF file was empty.")
+                        if sdf_content:
+                             st.write(f"[Debug] SDF content downloaded (length: {len(sdf_content)})") # Debug
+                        else:
+                             st.warning("[Debug] Downloaded 3D SDF file was empty.") # Debug
+                             sdf_content = None # Ensure it's None if empty
 
                     except pcp.NotFoundError:
                         st.warning(f"3D structure (SDF) not found on PubChem for CID {compound.cid}.")
@@ -171,40 +158,58 @@ if raw_molecule_name:
 
                 # Render 3D view only if SDF content was obtained
                 if sdf_content:
+                    viewer_html = None # Initialize
                     try:
                          # Configure py3Dmol viewer
+                        st.write("[Debug] Configuring py3Dmol viewer...") # Debug
                         viewer = py3Dmol.view(width=400, height=400)
                         viewer.addModel(sdf_content, 'sdf')
-                        viewer.setStyle({'stick': {}}) # Display as stick model
-                        viewer.setBackgroundColor('0xeeeeee') # Light gray background
+                        viewer.setStyle({'stick': {}})
+                        viewer.setBackgroundColor('0xeeeeee')
                         viewer.zoomTo()
+                        st.write("[Debug] Viewer configured. Generating HTML...") # Debug
 
-                        # Generate HTML representation using the correct method
-                        viewer_html = viewer.to_html()
+                        # --- Generate HTML with specific error checking ---
+                        try:
+                            viewer_html = viewer.to_html()
+                            # Check if HTML generation was successful
+                            if viewer_html:
+                                st.write(f"[Debug] HTML generated (type: {type(viewer_html)}, length: {len(viewer_html)})") # Debug
+                            else:
+                                st.error("[Debug] viewer.to_html() returned None or empty string.")
+                                viewer_html = None # Ensure it's None if empty/failed
 
-                        # Embed the HTML using Streamlit components
-                        components.html(viewer_html, height=410, width=410)
+                        except TypeError as type_err:
+                            st.error(f"[Debug] TypeError occurred specifically during viewer.to_html(): {type_err}") # Debug specific error
+                            viewer_html = None # Ensure html is None on error
+                        except Exception as html_gen_error:
+                            st.error(f"[Debug] Non-TypeError exception during viewer.to_html(): {html_gen_error}") # Debug other errors
+                            st.error(f"[Debug] Exception type: {type(html_gen_error)}")
+                            viewer_html = None # Ensure html is None on error
+
+
+                        # Embed the HTML using Streamlit components only if HTML was generated successfully
+                        if viewer_html:
+                            st.write("[Debug] Embedding HTML component...") # Debug
+                            components.html(viewer_html, height=410, width=410)
+                            st.write("[Debug] HTML component embedding attempted.") # Debug
+                        # else: # No need for else, error already shown if viewer_html is None
+                        #    st.error("Failed to generate HTML for 3D view.")
+
 
                     except Exception as e:
-                        # Catch potential errors during py3Dmol rendering
-                        st.error(f"Error rendering 3D view with py3Dmol/components: {e}")
-                        # Also print the type of exception for debugging
+                        # Catch potential errors during py3Dmol setup (before to_html) or rendering
+                        st.error(f"Error during py3Dmol setup or rendering: {e}")
                         st.error(f"Exception type: {type(e)}")
 
         # Display Synonyms (Other names)
-        # Check if compound and synonyms attribute exist and synonyms list is not empty
         if compound and hasattr(compound, 'synonyms') and compound.synonyms:
              st.subheader("Other Names (Synonyms):")
-             # Show only the first 5 synonyms to avoid clutter
              st.json(compound.synonyms[:5])
 
-    # This message is shown only if a search was attempted (raw_molecule_name is not empty)
-    # but get_molecule_data returned None (or failed)
     elif raw_molecule_name:
-        # The error message should have been displayed within get_molecule_data
-        # Add a generic message here if needed, but avoid redundancy
+        # Error/Not found message displayed within get_molecule_data
         st.info("Search finished. See messages above for results or errors.")
-
 
 else:
     # Initial message when the input box is empty
