@@ -43,11 +43,14 @@ def get_molecule_data(name):
             return results[0] # Return the first result
         else:
             return None
-    except Exception as e:
-        st.error(f"Error connecting to PubChem: {e}")
+    except pcp.PubChemHTTPError as e:
+        # Handle specific PubChem errors like not found or server issues
+        st.error(f"PubChem Error: {e}")
         return None
-
-# --- REMOVED detect_language function ---
+    except Exception as e:
+        # Handle other potential errors (network, etc.)
+        st.error(f"An unexpected error occurred: {e}")
+        return None
 
 # --- Streamlit User Interface ---
 
@@ -59,17 +62,16 @@ The search is case-insensitive and handles extra spaces (e.g., '1 chlorobutane' 
 """)
 
 # --- Get User Input ---
-# Updated placeholder and removed Persian references
 raw_molecule_name = st.text_input("Molecule Name (English):", placeholder="e.g., Water, Aspirin, 1-chlorobutane")
 
 if raw_molecule_name:
-    # --- REMOVED language detection block ---
     # Normalize the input name directly
     normalized_name = normalize_name(raw_molecule_name)
 
     st.write(f"Searching for: `{normalized_name}`")
 
     # --- Search and Display Information ---
+    compound = None # Initialize compound to None
     with st.spinner(f"Searching for information on {raw_molecule_name}..."):
         compound = get_molecule_data(normalized_name)
 
@@ -84,7 +86,7 @@ if raw_molecule_name:
         with col1:
             st.metric("Molecular Formula", compound.molecular_formula or "N/A")
         with col2:
-            # --- UPDATED Molecular Weight Handling ---
+            # Molecular Weight Handling
             mol_weight_display = "N/A" # Default value
             if compound.molecular_weight is not None: # Check if it exists
                 try:
@@ -92,17 +94,14 @@ if raw_molecule_name:
                     weight_float = float(compound.molecular_weight)
                     mol_weight_display = f"{weight_float:.2f} g/mol"
                 except (ValueError, TypeError):
-                    # If conversion fails (e.g., it's already a string like "Approx. 58"), display as is
+                    # If conversion fails, display as is (might be a string already)
                     mol_weight_display = f"{compound.molecular_weight} g/mol" # Fallback
 
-            # Use the prepared string in st.metric
             st.metric("Molecular Weight", mol_weight_display)
-            # --- End of Update ---
 
         # Display CID and link to PubChem
         if compound.cid:
              st.markdown(f"**PubChem CID:** [{compound.cid}](https://pubchem.ncbi.nlm.nih.gov/compound/{compound.cid})")
-
 
         # --- Display Structures ---
         mol = None
@@ -112,6 +111,8 @@ if raw_molecule_name:
                 mol = Chem.MolFromSmiles(compound.isomeric_smiles)
             except Exception as e:
                 st.error(f"Error processing SMILES with RDKit: {e}")
+                # Don't proceed if mol object creation failed
+                mol = None
 
         if mol:
             st.subheader("Molecule Structure:")
@@ -133,12 +134,17 @@ if raw_molecule_name:
                 sdf_content = None
                 try:
                     # Attempt to download 3D SDF format from PubChem
-                    temp_sdf_file = f'cid_{compound.cid}_3d.sdf'
-                    pcp.download('SDF', temp_sdf_file, compound.cid, 'cid', record_type='3d', overwrite=True)
+                    # Use CID for reliable downloading
+                    if compound.cid:
+                        temp_sdf_file = f'cid_{compound.cid}_3d.sdf'
+                        pcp.download('SDF', temp_sdf_file, compound.cid, 'cid', record_type='3d', overwrite=True)
 
-                    # Read the content of the downloaded SDF file
-                    with open(temp_sdf_file, 'r') as f:
-                       sdf_content = f.read()
+                        # Read the content of the downloaded SDF file
+                        with open(temp_sdf_file, 'r') as f:
+                            sdf_content = f.read()
+                    else:
+                         st.warning("Cannot fetch 3D structure without a PubChem CID.")
+
 
                 except pcp.NotFoundError:
                      st.warning("3D structure (SDF) not found on PubChem for this compound.")
@@ -154,26 +160,30 @@ if raw_molecule_name:
                         viewer.setBackgroundColor('0xeeeeee') # Light gray background
                         viewer.zoomTo()
 
-                        # Generate HTML representation from py3Dmol viewer
-                        viewer_html = viewer._repr_html_()
+                        # --- CORRECT WAY to get HTML for embedding ---
+                        # Generate HTML representation using the correct method
+                        viewer_html = viewer.to_html()
+                        # --- End of correction ---
+
                         # Embed the HTML using Streamlit components
                         components.html(viewer_html, height=410, width=410)
 
                     except Exception as e:
                         st.error(f"Error rendering 3D view with py3Dmol/components: {e}")
-
-        else:
-            # This message appears if SMILES string was missing or RDKit failed to parse it
-            st.warning("Molecule structure data (SMILES) not available or couldn't be processed.")
+                # Added a condition for when SDF couldn't be fetched/read but no specific error was raised before
+                elif compound.cid: # Only show this if we attempted download (i.e., had CID)
+                    st.info("Could not display 3D structure (SDF content missing or download failed).")
 
         # Display Synonyms (Other names)
-        if compound.synonyms:
+        # Check if compound and synonyms attribute exist
+        if compound and hasattr(compound, 'synonyms') and compound.synonyms:
              st.subheader("Other Names (Synonyms):")
              # Show only the first 5 synonyms to avoid clutter
              st.json(compound.synonyms[:5])
 
-
-    elif raw_molecule_name: # Only show error if user actually typed something and nothing was found
+    # This message is shown only if a search was attempted (raw_molecule_name is not empty)
+    # but get_molecule_data returned None
+    elif raw_molecule_name:
         st.error(f"Sorry, no molecule found matching '{raw_molecule_name}' (or normalized name `{normalized_name}`).")
         st.info("Please check the spelling and use the English name.")
 
