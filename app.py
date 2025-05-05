@@ -3,19 +3,21 @@ import pubchempy as pcp
 from rdkit import Chem
 from rdkit.Chem import Draw
 import py3Dmol
-from st_py3dmol import st_py3dmol # برای نمایش سه بعدی در استریملیت
-import re # برای کار با متن
+from streamlit_py3dmol import st_py3dmol # Import the Streamlit component for py3Dmol
+import re # For text manipulation (regex)
+from PIL import Image # Needed by RDKit Draw sometimes explicitly, and Pillow is in requirements
 
-# --- توابع کمکی ---
+# --- Helper Functions ---
 
 def normalize_name(name):
     """
-    اسم مولکول رو تمیز می‌کنه تا جستجو بهتر انجام بشه.
-    فاصله‌ها رو حذف می‌کنه، به حروف کوچک تبدیل می‌کنه.
-    اعداد فارسی رو به انگلیسی تبدیل می‌کنه.
+    Cleans the molecule name for better search results.
+    Removes leading/trailing whitespace, converts to lowercase.
+    Converts Persian/Arabic numerals to English numerals.
+    Handles spaces (converts multiple spaces to one).
     """
-    name = name.strip() # حذف فاصله‌های اضافی اول و آخر
-    # تبدیل اعداد فارسی و عربی به انگلیسی
+    name = name.strip() # Remove leading/trailing whitespace
+    # Convert Persian and Arabic numerals to English
     persian_nums = "۰۱۲۳۴۵۶۷۸۹"
     arabic_nums = "٠١٢٣٤٥٦٧٨٩"
     english_nums = "0123456789"
@@ -24,146 +26,168 @@ def normalize_name(name):
     name = name.translate(translation_table_persian)
     name = name.translate(translation_table_arabic)
 
-    # حذف همه فاصله‌ها (بحث‌برانگیز، شاید بهتر باشه فقط فاصله‌های اضافی حذف شه)
-    # name = name.replace(" ", "") # روش ساده ولی ممکنه مشکل‌ساز باشه
-    # روش بهتر: حذف فاصله‌های تکراری و تبدیل به یک فاصله
+    # Replace multiple whitespace characters with a single space
     name = re.sub(r'\s+', ' ', name).strip()
-    # به حروف کوچک تبدیل کن (PubChem معمولا با حروف کوچک بهتر کار می‌کنه)
+    # Convert to lowercase (PubChem often works better with lowercase)
     name = name.lower()
     return name
 
 def get_molecule_data(name):
     """
-    با استفاده از PubChemPy اطلاعات مولکول رو پیدا می‌کنه.
+    Fetches molecule data from PubChem using PubChemPy.
     """
     try:
+        # Search by name, limit to 1 result for simplicity
         results = pcp.get_compounds(name, 'name')
         if results:
-            return results[0] # اولین نتیجه رو برمی‌گردونه
+            return results[0] # Return the first result
         else:
             return None
     except Exception as e:
-        st.error(f"خطا در ارتباط با PubChem: {e}")
+        st.error(f"Error connecting to PubChem: {e}")
         return None
 
 def detect_language(text):
     """
-    تشخیص ساده زبان فارسی بر اساس وجود حروف فارسی.
+    Simple detection of Persian language based on character range.
     """
+    # Check if any character falls within the Persian Unicode range
     if re.search(r'[\u0600-\u06FF]', text):
         return "Persian"
     else:
-        # فرض می‌کنیم بقیه انگلیسی هستن (یا حداقل قابل جستجو در PubChem)
+        # Assume English or other non-Persian if no Persian chars found
         return "English"
 
-# --- رابط کاربری Streamlit ---
+# --- Streamlit User Interface ---
 
-st.set_page_config(layout="wide") # صفحه رو عریض‌تر می‌کنه
-st.title("🧪 اپلیکیشن نمایش اطلاعات مولکول ⌬")
+st.set_page_config(layout="wide") # Use wide layout for more space
+st.title("🧪 Molecule Information Viewer ⌬")
 st.markdown("""
-اسم یک مولکول را به فارسی یا انگلیسی وارد کنید. اپلیکیشن سعی می‌کند اطلاعات و ساختار آن را نمایش دهد.
-**نکته:** جستجو بر اساس نام انگلیسی دقیق‌تر است. برای نام‌های فارسی، ممکن است نیاز به ترجمه باشد.
+Enter the name of a molecule in English or Persian. The app will try to display its information and structure.
+**Note:** Searching by the exact English name usually yields better results. Persian names might require translation (not implemented yet).
 """)
 
-# --- دریافت ورودی از کاربر ---
-raw_molecule_name = st.text_input("نام مولکول:", placeholder="مثلا: آب، Water, ۱-کلروبوتان, 1-chlorobutane")
+# --- Get User Input ---
+raw_molecule_name = st.text_input("Molecule Name:", placeholder="e.g., Water, Aspirin, 1-chlorobutane, آب")
 
 if raw_molecule_name:
-    # تشخیص زبان ورودی
+    # Detect input language
     lang = detect_language(raw_molecule_name)
-    st.write(f"زبان تشخیص داده شده: {'فارسی' if lang == 'Persian' else 'انگلیسی/غیره'}")
+    st.write(f"Detected language: {'Persian' if lang == 'Persian' else 'English/Other'}")
 
     if lang == "Persian":
-        st.warning("⚠️ توجه: جستجو با نام فارسی ممکن است دقیق نباشد یا نتیجه‌ای نداشته باشد. بهتر است نام انگلیسی مولکول را وارد کنید.")
-        # در آینده می‌توان اینجا یک سرویس ترجمه اضافه کرد
-        # فعلا، فقط نام فارسی نرمال‌شده را امتحان می‌کنیم (احتمال موفقیت کم است)
+        st.warning("⚠️ Note: Searching with Persian names may be inaccurate or return no results. Using the English name is recommended.")
+        # Future improvement: Add a translation service here.
+        # For now, just try the normalized Persian name (low chance of success on PubChem)
         normalized_name = normalize_name(raw_molecule_name)
     else:
-        # نرمال‌سازی نام انگلیسی
+        # Normalize the English name
         normalized_name = normalize_name(raw_molecule_name)
 
-    st.write(f"جستجو برای: `{normalized_name}`")
+    st.write(f"Searching for: `{normalized_name}`")
 
-    # --- جستجو و نمایش اطلاعات ---
-    with st.spinner(f"در حال جستجوی اطلاعات برای {raw_molecule_name}..."):
+    # --- Search and Display Information ---
+    with st.spinner(f"Searching for information on {raw_molecule_name}..."):
         compound = get_molecule_data(normalized_name)
 
     if compound:
-        st.success(f"اطلاعات مولکول '{compound.iupac_name or raw_molecule_name}' پیدا شد!")
+        # Use IUPAC name if available, otherwise the raw input
+        display_name = compound.iupac_name if compound.iupac_name else raw_molecule_name
+        st.success(f"Found information for '{display_name}'!")
 
-        # نمایش اطلاعات پایه
-        st.subheader("اطلاعات پایه:")
+        # Display basic info
+        st.subheader("Basic Information:")
         col1, col2 = st.columns(2)
         with col1:
-            st.metric("فرمول مولکولی", compound.molecular_formula or "N/A")
+            st.metric("Molecular Formula", compound.molecular_formula or "N/A")
         with col2:
-            st.metric("وزن مولکولی", f"{compound.molecular_weight or 0:.2f} g/mol")
+            # Format weight to 2 decimal places if available
+            mol_weight = f"{compound.molecular_weight:.2f} g/mol" if compound.molecular_weight else "N/A"
+            st.metric("Molecular Weight", mol_weight)
 
-        # نمایش CID و لینک به PubChem
+        # Display CID and link to PubChem
         if compound.cid:
-             st.markdown(f"**شناسه PubChem (CID):** [{compound.cid}](https://pubchem.ncbi.nlm.nih.gov/compound/{compound.cid})")
+             st.markdown(f"**PubChem CID:** [{compound.cid}](https://pubchem.ncbi.nlm.nih.gov/compound/{compound.cid})")
 
 
-        # --- نمایش ساختارها ---
+        # --- Display Structures ---
         mol = None
         if compound.isomeric_smiles:
             try:
+                # Create RDKit molecule object from SMILES string
                 mol = Chem.MolFromSmiles(compound.isomeric_smiles)
             except Exception as e:
-                st.error(f"خطا در پردازش SMILES با RDKit: {e}")
+                st.error(f"Error processing SMILES with RDKit: {e}")
 
         if mol:
-            st.subheader("ساختار مولکول:")
+            st.subheader("Molecule Structure:")
             col_2d, col_3d = st.columns(2)
 
-            # نمایش ساختار 2 بعدی
+            # Display 2D structure
             with col_2d:
-                st.markdown("**ساختار دو بعدی:**")
+                st.markdown("**2D Structure:**")
                 try:
+                    # Generate 2D image using RDKit
                     img = Draw.MolToImage(mol, size=(300, 300))
                     st.image(img)
                 except Exception as e:
-                    st.error(f"خطا در تولید تصویر دو بعدی: {e}")
+                    st.error(f"Error generating 2D image: {e}")
 
-            # نمایش ساختار 3 بعدی
+            # Display 3D structure
             with col_3d:
-                st.markdown("**ساختار سه بعدی (تعاملی):**")
+                st.markdown("**3D Structure (Interactive):**")
+                sdf_content = None
                 try:
-                    # گرفتن فرمت SDF از PubChem برای اطلاعات سه بعدی
-                    sdf_3d = pcp.download('SDF', f'cid_{compound.cid}_3d.sdf', compound.cid, 'cid', record_type='3d', overwrite=True)
-                    # خواندن محتوای فایل SDF دانلود شده
-                    with open(f'cid_{compound.cid}_3d.sdf', 'r') as f:
+                    # Attempt to download 3D SDF format from PubChem
+                    # Note: Downloading directly to memory might be better, but requires more complex handling
+                    # For simplicity on Streamlit Cloud, we download to a temporary file implicitly created by PubChemPy
+                    # Overwrite=True ensures we get a fresh file if it exists
+                    temp_sdf_file = f'cid_{compound.cid}_3d.sdf'
+                    pcp.download('SDF', temp_sdf_file, compound.cid, 'cid', record_type='3d', overwrite=True)
+
+                    # Read the content of the downloaded SDF file
+                    with open(temp_sdf_file, 'r') as f:
                        sdf_content = f.read()
 
-                    if sdf_content:
-                         # تنظیمات نمایشگر py3Dmol
+                except pcp.NotFoundError:
+                     st.warning("3D structure (SDF) not found on PubChem for this compound.")
+                except Exception as e:
+                    st.error(f"Error downloading 3D SDF from PubChem: {e}")
+
+                if sdf_content:
+                    try:
+                         # Configure py3Dmol viewer
                         viewer = py3Dmol.view(width=400, height=400)
                         viewer.addModel(sdf_content, 'sdf')
-                        viewer.setStyle({'stick': {}}) # نمایش به صورت میله‌ای
+                        viewer.setStyle({'stick': {}}) # Display as stick model
+                        # viewer.setStyle({'sphere': {'scale': 0.3}, 'stick': {'radius': 0.15}}) # Alternative style: ball-and-stick
+                        viewer.setBackgroundColor('0xeeeeee') # Light gray background
                         viewer.zoomTo()
-                        # نمایش در Streamlit با استفاده از کامپوننت سفارشی
-                        st_py3dmol(viewer)
-                    else:
-                         st.warning("اطلاعات ساختار سه بعدی در دسترس نیست.")
 
-                except Exception as e:
-                    # اگر دانلود SDF 3D شکست خورد یا py3Dmol مشکل داشت
-                    st.error(f"خطا در نمایش سه بعدی: {e}")
-                    st.info("ممکن است ساختار سه بعدی برای این مولکول در PubChem موجود نباشد یا خطایی رخ داده باشد.")
+                        # Display the viewer in Streamlit using the component
+                        st_py3dmol(viewer, height=400, width=400)
+
+                    except Exception as e:
+                        st.error(f"Error rendering 3D view with py3Dmol: {e}")
+                # else: (Handled by the warning above if sdf_content is None due to NotFoundError)
+                     # st.warning("Could not display 3D structure (SDF content missing or download failed).")
+
 
         else:
-            st.warning("ساختار مولکولی (SMILES) برای پردازش در دسترس نیست.")
+            # This message appears if SMILES string was missing or RDKit failed to parse it
+            st.warning("Molecule structure data (SMILES) not available or couldn't be processed.")
 
-        # نمایش اطلاعات بیشتر (Synonyms)
+        # Display Synonyms (Other names)
         if compound.synonyms:
-             st.subheader("نام‌های دیگر:")
-             # نمایش ۵ نام اول برای جلوگیری از شلوغی
+             st.subheader("Other Names (Synonyms):")
+             # Show only the first 5 synonyms to avoid clutter
              st.json(compound.synonyms[:5])
 
 
-    elif raw_molecule_name: # فقط اگر کاربر چیزی وارد کرده بود و نتیجه‌ای نبود
-        st.error(f"متاسفانه مولکولی با نام '{raw_molecule_name}' (یا معادل نرمال‌شده آن `{normalized_name}`) پیدا نشد.")
-        st.info("لطفاً از صحت نام مطمئن شوید و ترجیحاً از نام انگلیسی استفاده کنید.")
+    elif raw_molecule_name: # Only show error if user actually typed something and nothing was found
+        st.error(f"Sorry, no molecule found matching '{raw_molecule_name}' (or normalized name `{normalized_name}`).")
+        st.info("Please check the spelling. Using the English name is recommended.")
 
 else:
-    st.info("لطفاً نام یک مولکول را در کادر بالا وارد کنید.")
+    # Initial message when the input box is empty
+    st.info("Please enter a molecule name in the box above.")
