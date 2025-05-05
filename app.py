@@ -3,22 +3,15 @@ import pubchempy as pcp
 from rdkit import Chem
 from rdkit.Chem import Draw
 import py3Dmol
-import streamlit.components.v1 as components # Import Streamlit components
-import re # For text manipulation (regex)
-from PIL import Image # Needed by RDKit Draw sometimes explicitly, and Pillow is in requirements
-import numpy # Import numpy - good practice although implicitly used
+import streamlit.components.v1 as components
+import re
+import numpy # Ensure numpy is imported if needed by dependencies
+from PIL import Image
+import uuid # To generate unique IDs for divs
 
-# --- Helper Functions ---
-
+# --- Helper Functions (Keep as before) ---
 def normalize_name(name):
-    """
-    Cleans the molecule name for better search results.
-    Removes leading/trailing whitespace, converts to lowercase.
-    Handles spaces (converts multiple spaces to one).
-    (Kept numeral conversion in case numbers are typed differently)
-    """
-    name = name.strip() # Remove leading/trailing whitespace
-    # Convert Persian and Arabic numerals to English (just in case)
+    name = name.strip()
     persian_nums = "۰۱۲۳۴۵۶۷۸۹"
     arabic_nums = "٠١٢٣٤٥٦٧٨٩"
     english_nums = "0123456789"
@@ -26,74 +19,57 @@ def normalize_name(name):
     translation_table_arabic = str.maketrans(arabic_nums, english_nums)
     name = name.translate(translation_table_persian)
     name = name.translate(translation_table_arabic)
-
-    # Replace multiple whitespace characters with a single space
     name = re.sub(r'\s+', ' ', name).strip()
-    # Convert to lowercase (PubChem often works better with lowercase)
     name = name.lower()
     return name
 
 def get_molecule_data(name):
-    """
-    Fetches molecule data from PubChem using PubChemPy.
-    Includes basic error handling for PubChem queries.
-    """
     try:
-        # Search by name, limit to 1 result for simplicity
         results = pcp.get_compounds(name, 'name')
         if results:
-            return results[0] # Return the first result
+            return results[0]
         else:
             return None
     except pcp.PubChemHTTPError as e:
-        # Handle specific PubChem errors like not found or server issues more gracefully
         if "PUGREST.NotFound" in str(e):
-             st.error(f"Molecule '{name}' not found in PubChem (PubChemHTTPError).")
+             st.error(f"Molecule '{name}' not found in PubChem.")
         else:
              st.error(f"PubChem Error: {e}")
         return None
     except Exception as e:
-        # Handle other potential errors (network connectivity, etc.)
         st.error(f"An unexpected error occurred during PubChem search: {e}")
         return None
 
 # --- Streamlit User Interface ---
-
-st.set_page_config(layout="wide") # Use wide layout for more space
+st.set_page_config(layout="wide")
 st.title("🧪 Molecule Information Viewer ⌬")
 st.markdown("""
 Enter the English name of a molecule. The app will try to display its information and structure.
-The search is case-insensitive and handles extra spaces (e.g., '1 chlorobutane' works).
 """)
 
 # --- Get User Input ---
 raw_molecule_name = st.text_input("Molecule Name (English):", placeholder="e.g., Water, Aspirin, 1-chlorobutane")
 
 if raw_molecule_name:
-    # Normalize the input name directly
     normalized_name = normalize_name(raw_molecule_name)
-
     st.write(f"Searching for: `{normalized_name}`")
 
     # --- Search and Display Information ---
-    compound = None # Initialize compound to None
+    compound = None
     with st.spinner(f"Searching PubChem for '{normalized_name}'..."):
         compound = get_molecule_data(normalized_name)
 
-    # Proceed only if compound data was successfully retrieved
     if compound:
-        # Use IUPAC name if available, otherwise the raw input
         display_name = compound.iupac_name if compound.iupac_name else raw_molecule_name
         st.success(f"Found information for '{display_name}'!")
 
-        # Display basic info
+        # Basic Info
         st.subheader("Basic Information:")
         col1, col2 = st.columns(2)
         with col1:
             st.metric("Molecular Formula", compound.molecular_formula or "N/A")
         with col2:
-            # CORRECTED Molecular Weight Handling
-            mol_weight_display = "N/A" # Default value
+            mol_weight_display = "N/A"
             if hasattr(compound, 'molecular_weight') and compound.molecular_weight is not None:
                 try:
                     weight_float = float(compound.molecular_weight)
@@ -104,12 +80,11 @@ if raw_molecule_name:
                          mol_weight_display += " g/mol"
             st.metric("Molecular Weight", mol_weight_display)
 
-        # Display CID and link to PubChem
         if compound.cid:
              st.markdown(f"**PubChem CID:** [{compound.cid}](https://pubchem.ncbi.nlm.nih.gov/compound/{compound.cid})")
 
-        # --- Display Structures ---
-        mol = None # RDKit molecule object
+        # Structures
+        mol = None
         if hasattr(compound, 'isomeric_smiles') and compound.isomeric_smiles:
             try:
                 mol = Chem.MolFromSmiles(compound.isomeric_smiles)
@@ -123,7 +98,7 @@ if raw_molecule_name:
             st.subheader("Molecule Structure:")
             col_2d, col_3d = st.columns(2)
 
-            # Display 2D structure
+            # 2D Structure
             with col_2d:
                 st.markdown("**2D Structure:**")
                 try:
@@ -132,23 +107,22 @@ if raw_molecule_name:
                 except Exception as e:
                     st.error(f"Error generating 2D image: {e}")
 
-            # Display 3D structure using components.html
+            # 3D Structure
             with col_3d:
                 st.markdown("**3D Structure (Interactive):**")
                 sdf_content = None
                 if compound.cid:
                     try:
-                        st.write(f"[Debug] Attempting to download 3D SDF for CID: {compound.cid}") # Debug
+                        st.write(f"[Debug] Attempting to download 3D SDF for CID: {compound.cid}")
                         temp_sdf_file = f'cid_{compound.cid}_3d.sdf'
                         pcp.download('SDF', temp_sdf_file, compound.cid, 'cid', record_type='3d', overwrite=True)
                         with open(temp_sdf_file, 'r') as f:
                             sdf_content = f.read()
                         if sdf_content:
-                             st.write(f"[Debug] SDF content downloaded (length: {len(sdf_content)})") # Debug
+                             st.write(f"[Debug] SDF content downloaded (length: {len(sdf_content)})")
                         else:
-                             st.warning("[Debug] Downloaded 3D SDF file was empty.") # Debug
-                             sdf_content = None # Ensure it's None if empty
-
+                             st.warning("[Debug] Downloaded 3D SDF file was empty.")
+                             sdf_content = None
                     except pcp.NotFoundError:
                         st.warning(f"3D structure (SDF) not found on PubChem for CID {compound.cid}.")
                     except Exception as e:
@@ -156,61 +130,75 @@ if raw_molecule_name:
                 else:
                     st.warning("Cannot fetch 3D structure without a PubChem CID.")
 
-                # Render 3D view only if SDF content was obtained
                 if sdf_content:
-                    viewer_html = None # Initialize
                     try:
-                         # Configure py3Dmol viewer
-                        st.write("[Debug] Configuring py3Dmol viewer...") # Debug
+                        st.write("[Debug] Configuring py3Dmol viewer...")
                         viewer = py3Dmol.view(width=400, height=400)
                         viewer.addModel(sdf_content, 'sdf')
                         viewer.setStyle({'stick': {}})
                         viewer.setBackgroundColor('0xeeeeee')
                         viewer.zoomTo()
-                        st.write("[Debug] Viewer configured. Generating HTML...") # Debug
+                        st.write("[Debug] Viewer configured. Attempting MANUAL HTML generation...")
 
-                        # --- Generate HTML with specific error checking ---
-                        try:
-                            viewer_html = viewer.to_html()
-                            # Check if HTML generation was successful
-                            if viewer_html:
-                                st.write(f"[Debug] HTML generated (type: {type(viewer_html)}, length: {len(viewer_html)})") # Debug
-                            else:
-                                st.error("[Debug] viewer.to_html() returned None or empty string.")
-                                viewer_html = None # Ensure it's None if empty/failed
+                        # --- MANUAL HTML GENERATION WORKAROUND ---
+                        # 1. Get the necessary JS commands from the viewer object
+                        viewer_js = viewer.js
+                        if not viewer_js:
+                             raise ValueError("viewer.js attribute is empty, cannot generate manual HTML.")
+                        st.write(f"[Debug] viewer.js content obtained (length: {len(viewer_js)})")
 
-                        except TypeError as type_err:
-                            st.error(f"[Debug] TypeError occurred specifically during viewer.to_html(): {type_err}") # Debug specific error
-                            viewer_html = None # Ensure html is None on error
-                        except Exception as html_gen_error:
-                            st.error(f"[Debug] Non-TypeError exception during viewer.to_html(): {html_gen_error}") # Debug other errors
-                            st.error(f"[Debug] Exception type: {type(html_gen_error)}")
-                            viewer_html = None # Ensure html is None on error
+                        # 2. Define a unique ID for the container div
+                        viewer_div_id = f"molviewer-{uuid.uuid4()}"
 
+                        # 3. Construct the HTML string
+                        # Using CDN links for py3Dmol and jQuery (py3Dmol dependency)
+                        py3dmol_js_url = "https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.0.4/3Dmol-min.js"
+                        jquery_url = "https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js" # Using a recent jQuery
 
-                        # Embed the HTML using Streamlit components only if HTML was generated successfully
-                        if viewer_html:
-                            st.write("[Debug] Embedding HTML component...") # Debug
-                            components.html(viewer_html, height=410, width=410)
-                            st.write("[Debug] HTML component embedding attempted.") # Debug
-                        # else: # No need for else, error already shown if viewer_html is None
-                        #    st.error("Failed to generate HTML for 3D view.")
+                        manual_html = f"""
+                            <script src="{jquery_url}"></script>
+                            <script src="{py3dmol_js_url}"></script>
+                            <div id="{viewer_div_id}" style="height: 400px; width: 400px; position: relative;"></div>
+                            <script>
+                                (function() {{
+                                    try {{
+                                        let element = $('#{viewer_div_id}');
+                                        let config = {{}}; // Default config
+                                        console.log("Creating 3Dmol viewer in div:", "{viewer_div_id}");
+                                        let viewer = $3Dmol.createViewer(element, config);
+                                        console.log("Applying viewer commands...");
+                                        {viewer_js} // Inject the specific commands for this viewer instance
+                                        console.log("Rendering viewer...");
+                                        viewer.render();
+                                        console.log("Viewer rendering process initiated.");
+                                    }} catch (error) {{
+                                        console.error("Error during 3Dmol manual script execution:", error);
+                                        // Optionally display error in the div
+                                        $('#{viewer_div_id}').html('<p style="color:red;">Error initializing 3D viewer. Check browser console.</p>');
+                                    }}
+                                }})();
+                            </script>
+                        """
+                        st.write(f"[Debug] Manual HTML string created (length: {len(manual_html)})")
 
+                        # 4. Embed using Streamlit components
+                        st.write("[Debug] Embedding manual HTML component...")
+                        components.html(manual_html, height=410, width=410)
+                        st.write("[Debug] Manual HTML component embedding attempted.")
+                        # --- END OF MANUAL HTML GENERATION WORKAROUND ---
 
                     except Exception as e:
-                        # Catch potential errors during py3Dmol setup (before to_html) or rendering
-                        st.error(f"Error during py3Dmol setup or rendering: {e}")
+                        # Catch errors during viewer setup or manual HTML generation itself
+                        st.error(f"Error during py3Dmol setup or manual HTML generation: {e}")
                         st.error(f"Exception type: {type(e)}")
 
-        # Display Synonyms (Other names)
+        # Synonyms
         if compound and hasattr(compound, 'synonyms') and compound.synonyms:
              st.subheader("Other Names (Synonyms):")
              st.json(compound.synonyms[:5])
 
     elif raw_molecule_name:
-        # Error/Not found message displayed within get_molecule_data
         st.info("Search finished. See messages above for results or errors.")
 
 else:
-    # Initial message when the input box is empty
     st.info("Please enter an English molecule name in the box above.")
